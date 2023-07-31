@@ -8,11 +8,6 @@ def read_bib_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as bibfile:
         return bibtexparser.load(bibfile)
 
-def convert_field_to_lower(bib_database, field):
-    for entry in bib_database.entries:
-        if field in entry:
-            entry[field] = entry[field].lower()
-    return bib_database
 
 def remove_entries_without_field(bib_database, field):
     removed_entries = []
@@ -30,50 +25,31 @@ def merge_bib_databases(*bib_databases, field):
     merged_set = set()
     for bib_database in bib_databases:
         for entry in bib_database.entries:
-            if field in entry and entry[field] not in merged_set:
+            if field in entry and entry[field].lower() not in merged_set:
                 merged_bib_database.entries.append(entry)
-                merged_set.add(entry[field])
+                merged_set.add(entry[field].lower())
     return merged_bib_database
 
 
 def find_intersection(bib_database1, bib_database2, field):
     intersection = []
-    entries_set = {entry[field] for entry in bib_database1.entries}
+    entries_set = {entry[field].lower() for entry in bib_database1.entries}
     for entry in bib_database2.entries:
-        if entry[field] in entries_set:
+        if entry[field].lower() in entries_set:
             intersection.append(entry)
     return intersection
 
-#def find_intersection(bib_database1, bib_database2, field):
-#    # Convert Python dictionaries to a list of BibEntry objects
-#    bib_entries1 = [bib_functions.BibEntry(str(entry[field]), i,True) for i, entry in enumerate(bib_database1.entries)]
-#
-#    bib_entries2 = [bib_functions.BibEntry(str(entry[field]), i,False) for i, entry in enumerate(bib_database2.entries)]
-#
-#    # Call the C++ function using the Python bindings
-#    intersection = bib_functions.find_intersection(bib_entries1, bib_entries2)
-#
-#    # Convert the result back to Python dictionaries
-#    intersection_entries = [bib_database1.entries[entry._id] if entry._first else bib_database2.entries[entry._id] for entry in intersection]
-#    return intersection_entries
-
 def find_difference(bib_database1, bib_database2, field):
     difference = []
-    entries_set = {entry[field] for entry in bib_database2.entries}
+    entries_set = {entry[field].lower() for entry in bib_database2.entries}
     for entry in bib_database1.entries:
-        if entry[field] not in entries_set:
+        if entry[field].lower() not in entries_set:
             difference.append(entry)
     return difference
 
 def write_bib_file(file_path, bib_database):
     with open(file_path, 'w', encoding='utf-8') as bibfile:
         bibtexparser.dump(bib_database, bibfile)
-
-def remove_duplicates(bib_database, duplicates):
-    unique_entries = [entry for entry in bib_database.entries if entry not in duplicates]
-    unique_bib_database = bibtexparser.bibdatabase.BibDatabase()
-    unique_bib_database.entries = unique_entries
-    return unique_bib_database
 
 def filter_entries_by_regex(bib_database, fields, regex_include=None, regex_exclude=None):
     filtered_entries = []
@@ -91,7 +67,6 @@ if __name__ == '__main__':
     parser.add_argument('-include', default='', help='Regex expression for inclusion')
     parser.add_argument('-exclude', default='', help='Regex expression for exclusion')
     parser.add_argument('-op',required=False, choices=['m', 'd', 'i'], help='Choose m for merge, d for difference or i for intersection')
-    parser.add_argument('-l', required=False,default='0', help='Tranform specified fields to lower case (default disabled)')
     parser.add_argument('-in',required=True, nargs='+',dest="infiles", help='List of .bib input files')
     parser.add_argument('-out',required=True,dest='output_file', help='Output .bib file name or threshold percentage')
     args = parser.parse_args()
@@ -105,10 +80,6 @@ if __name__ == '__main__':
     end = time.time()
     print(f"Time to read input files: {end - start} seconds")
     print(f"Found {sum(len(bib_db.entries) for bib_db in bib_databases)} entries")
-
-    if args.l == '1':
-        for bib_database in bib_databases:
-            bib_database = convert_field_to_lower(bib_database, args.f[0])
 
 
     bib_databases, removed_entries = zip(*[remove_entries_without_field(bib_db, args.f[0]) for bib_db in bib_databases])
