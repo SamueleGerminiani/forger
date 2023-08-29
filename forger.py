@@ -1,8 +1,14 @@
 import argparse
 import bibtexparser
-#import bib_functions
 import time
 import re
+import os
+import glob
+
+def clean(input_string):
+    # Use regular expression to remove non-alphabetic characters
+    output_string = re.sub(r'[^a-zA-Z]', '', input_string)
+    return output_string
 
 def read_bib_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as bibfile:
@@ -25,9 +31,9 @@ def merge_bib_databases(*bib_databases, field):
     merged_set = set()
     for bib_database in bib_databases:
         for entry in bib_database.entries:
-            if field in entry and entry[field].lower() not in merged_set:
+            if field in entry and clean(entry[field].lower()) not in merged_set:
                 merged_bib_database.entries.append(entry)
-                merged_set.add(entry[field].lower())
+                merged_set.add(clean(entry[field].lower()))
     return merged_bib_database
 
 
@@ -64,20 +70,43 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Perform operations on .bib files.')
     parser.add_argument('-f',required=True,nargs='+',default='doi', help='Field for comparison (default is "doi")')
+    parser.add_argument('-list',required=False, help='Print the entries in a list (one per line)')
     parser.add_argument('-include', default='', help='Regex expression for inclusion')
     parser.add_argument('-exclude', default='', help='Regex expression for exclusion')
     parser.add_argument('-op',required=False, choices=['m', 'd', 'i'], help='Choose m for merge, d for difference or i for intersection')
-    parser.add_argument('-in',required=True, nargs='+',dest="infiles", help='List of .bib input files')
+    parser.add_argument('-in',required=False, nargs='+',dest="infiles", help='List of .bib input files')
+    parser.add_argument('-dir', required=False, dest='dir_path', help='Directory path to read all .bib files (mutually exclusive with -in)')
     parser.add_argument('-out',required=True,dest='output_file', help='Output .bib file name or threshold percentage')
     args = parser.parse_args()
+
+    if not args.infiles and not args.dir_path:
+        parser.error("Please provide either -in with a list of .bib files or -dir with a directory path containing .bib files.")
+    elif args.infiles and args.dir_path:
+        parser.error("-in and -dir options are mutually exclusive. Please choose one.")
+
+
+    bib_files=None
+    start = time.time()
+    if args.dir_path:
+        if not os.path.isdir(args.dir_path):
+            parser.error(f"Directory path '{args.dir_path}' does not exist.")
+
+        bib_files = glob.glob(os.path.join(args.dir_path, '*.bib'))
+        if not bib_files:
+            parser.error(f"No .bib files found in the specified directory '{args.dir_path}'.")
+
+        bib_databases = [read_bib_file(infile) for infile in bib_files]
+
+    else:
+        bib_files=args.infiles
+        bib_databases = [read_bib_file(infile) for infile in bib_files]
+
 
     if ((args.op == 'i' or args.op == 'd') and len(args.infiles) != 2):
         parser.error("Operation requires two input files")
 
-
-    start = time.time()
-    bib_databases = [read_bib_file(infile) for infile in args.infiles]
     end = time.time()
+
     print(f"Time to read input files: {end - start} seconds")
     print(f"Found {sum(len(bib_db.entries) for bib_db in bib_databases)} entries")
 
@@ -85,17 +114,17 @@ if __name__ == '__main__':
     bib_databases, removed_entries = zip(*[remove_entries_without_field(bib_db, args.f[0]) for bib_db in bib_databases])
     for i, removed in enumerate(removed_entries):
         if removed:
-            print(f"Ignored {len(removed)} entries from {args.infiles[i]} that do not contain the field '{args.f[0]}'.")
+            print(f"Ignored {len(removed)} entries from {bib_files[i]} that do not contain the field '{args.f[0]}'.")
 
     result_database = bibtexparser.bibdatabase.BibDatabase()
 
     #op with more than 2 input files
     if args.op == 'm':
         result_database = merge_bib_databases(*bib_databases, field=args.f[0])
-        print(f"Merged {sum(len(bib_db.entries) for bib_db in bib_databases)} entries from {', '.join(args.infiles)}. Found {(sum(len(bib_db.entries) for bib_db in bib_databases))-len(result_database.entries)} duplicates. Merging result contains {len(result_database.entries)} entries.")
+        print(f"Merged {sum(len(bib_db.entries) for bib_db in bib_databases)} entries from {', '.join(bib_files)}. Found {(sum(len(bib_db.entries) for bib_db in bib_databases))-len(result_database.entries)} duplicates. Merging result contains {len(result_database.entries)} entries.")
     #op with 2 input files
     elif args.op == 'i':
-        intersection = find_intersection(bib_databases[0], bib_databases[1], args.f[0])
+        INTERSECtion = find_intersection(bib_databases[0], bib_databases[1], args.f[0])
         result_database.entries = intersection
         print(f"Found {len(result_database.entries)} common entries in {args.infiles[0]} and {args.infiles[1]}.")
     elif args.op == 'd':
@@ -115,6 +144,20 @@ if __name__ == '__main__':
             print(f"After filtering, result contains {len(filtered_entries)} of {len(result_database.entries)}.")
 
         result_database.entries = filtered_entries
+
+    if args.list:
+        #check if result_database is empty
+        if not result_database.entries:
+            result_database = merge_bib_databases(*bib_databases, field=args.f[0])
+    
+        for entry in result_database.entries:
+            for field in args.f:
+                if field in entry:
+                    print(entry[field])
+
+            
+
+
 
 
     write_bib_file(args.output_file, result_database)
