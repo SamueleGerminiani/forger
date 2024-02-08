@@ -71,6 +71,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Perform operations on .bib files.')
     parser.add_argument('-f',required=True,nargs='+',default='doi', help='Field for comparison (default is "doi")')
     parser.add_argument('-list',required=False, help='Print the entries in a list (one per line)')
+    parser.add_argument('-csv',nargs='+',required=False, help='Print the entries as a csv file ')
     parser.add_argument('-include', default='', help='Regex expression for inclusion')
     parser.add_argument('-exclude', default='', help='Regex expression for exclusion')
     parser.add_argument('-op',required=False, choices=['m', 'd', 'i'], help='Choose m for merge, d for difference or i for intersection')
@@ -157,6 +158,33 @@ if __name__ == '__main__':
 
             
 
+    if args.csv:
+        sep=';'
+        #check if result_database is empty
+        if not result_database.entries:
+            result_database = merge_bib_databases(*bib_databases, field=args.f[0])
+
+        outEntry= ""
+        for field in args.csv:
+            outEntry=outEntry+field + sep
+
+        outEntry= outEntry[:-1]
+        print(outEntry)
+
+        for entry in result_database.entries:
+            outEntry= ""
+            for field in args.csv:
+                 if field in entry:
+                   outEntry=outEntry+entry[field] + sep
+                 else:
+                   outEntry="None" +sep
+
+
+            outEntry= outEntry[:-1]
+            print(outEntry)
+    
+
+            
 
 
 
